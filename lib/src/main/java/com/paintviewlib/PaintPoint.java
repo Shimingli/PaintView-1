@@ -30,4 +30,5 @@ public class PaintPoint {
   public void setY(float y) {
     this.y = y;
   }
+
 }

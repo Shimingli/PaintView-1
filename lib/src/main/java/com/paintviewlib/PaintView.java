@@ -36,12 +36,14 @@ public class PaintView extends View {
   private PaintMode mMode = PaintMode.PAINT_MODE;
   //源
   private PaintSource mPaintSource = PaintSource.PAINT_SOURCE_PEN;
-  private float currentX, currentY;
   private Paint mPaint;
   private Path mPath;
   private float mEraserRadius;
   private HashSet<PaintPoint> mLine;
   private HashSet<HashSet<PaintPoint>> mLines;
+  private float mPreviousX = 0;
+  private float mPreviousY = 0;
+  private IPen mPen;
 
   public PaintView(Context context) {
     this(context, null);
@@ -58,13 +60,28 @@ public class PaintView extends View {
     mLines = new HashSet<>();
     mLine = new HashSet<>();
 
-    mPaint = new Paint();
-    mPaint.setAntiAlias(true);
-    mPaint.setColor(mPaintColor);
-    mPaint.setStrokeWidth(mPaintWidth);
+    initPaint();
+    initPath();
+    initPen();
 
+  }
+
+  private void initPen() {
+    mPen = new Pencil(mLines, mLine, mPath);
+  }
+
+  private void initPath() {
     mPath = new Path();
+  }
 
+  private void initPaint() {
+    mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG);
+    mPaint.setColor(mPaintColor);
+    mPaint.setStrokeJoin(Paint.Join.ROUND);
+    mPaint.setStrokeCap(Paint.Cap.ROUND);
+    mPaint.setStyle(Paint.Style.STROKE);
+    mPaint.setFilterBitmap(true);
+    mPaint.setStrokeWidth(mPaintWidth);
   }
 
   private void initAttr(Context context, AttributeSet attrs) {
@@ -89,7 +106,6 @@ public class PaintView extends View {
   @Override
   protected void onDraw(Canvas canvas) {
     super.onDraw(canvas);
-
     if (mMode == PaintMode.PAINT_MODE) {
       onPaint(canvas);
 
@@ -104,30 +120,29 @@ public class PaintView extends View {
   }
 
   private void onPaint(Canvas canvas) {
-
     canvas.drawPath(mPath, mPaint);
-
   }
 
   @Override
   public boolean onTouchEvent(MotionEvent event) {
+    final int action = event.getAction() & MotionEvent.ACTION_MASK;
     float x = event.getX();
     float y = event.getY();
 
-    switch (event.getAction()) {
+    switch (action) {
       case MotionEvent.ACTION_DOWN:
-        mLine = new HashSet<>();
-        currentX = x;
-        currentY = y;
-        mPath.moveTo(x, y);
-        mLine.add(new PaintPoint(x, y));
+        mPreviousX = x;
+        mPreviousY = y;
+        mPen.paintDown(x, y);
         break;
       case MotionEvent.ACTION_MOVE:
-        mPath.quadTo(currentX, currentY, x, y);
-        mLine.add(new PaintPoint(x, y));
+        mPen.paintMove(mPreviousX, mPreviousY, x, y);
+        //第二次执行时，第一次结束调用的坐标值将作为第二次调用的初始坐标值
+        mPreviousX = x;
+        mPreviousY = y;
         break;
       case MotionEvent.ACTION_UP:
-        mLines.add(mLine);
+        mPen.paintUp();
         break;
     }
 
@@ -135,11 +150,17 @@ public class PaintView extends View {
     return true;
   }
 
+
   public void setMode(PaintMode mMode) {
     this.mMode = mMode;
+    if (mMode == PaintMode.PAINT_MODE) {
+      mPen = new Pencil(mLines, mLine, mPath);
+    } else if (mMode == PaintMode.ERASE_MODE) {
+      mPen = new ErasePen();
+    }
   }
 
-  enum PaintMode {
+  public enum PaintMode {
     PAINT_MODE, ERASE_MODE
   }
 
